@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api } from "@/lib/api";
+import { db } from "@/lib/db";
 import { useAuth } from "@/context/AuthContext";
 import { won, fmtDate, STATUS_STYLES } from "@/lib/format";
 import {
@@ -49,8 +49,8 @@ export default function TransactionDetail() {
   const canReview = user?.role === "ADMIN" || user?.role === "ACCOUNTANT";
 
   const load = () =>
-    api.get(`/transactions/${id}`).then((r) => {
-      const t: Transaction = r.data.transaction;
+    db.getTransaction(Number(id)).then((r) => {
+      const t: Transaction = r.transaction;
       setTx(t);
       setPurpose(t.purpose);
       setMemo(t.memo);
@@ -67,11 +67,11 @@ export default function TransactionDetail() {
     setBusy(true);
     setMsg("");
     try {
-      await api.put(`/transactions/${id}`, { purpose, memo, category });
+      await db.updateTransaction(Number(id), { purpose, memo, category }, user?.id);
       await load();
       setMsg("저장되었습니다 / Saved");
     } catch (e: any) {
-      setMsg(e.response?.data?.error ?? "Save failed");
+      setMsg(e.message ?? "Save failed");
     } finally {
       setBusy(false);
     }
@@ -81,10 +81,10 @@ export default function TransactionDetail() {
     setBusy(true);
     setMsg("");
     try {
-      await api.post(`/transactions/${id}/review`, { action });
+      await db.reviewTransaction(Number(id), action as any, user?.id);
       await load();
     } catch (e: any) {
-      setMsg(e.response?.data?.error ?? "Action failed");
+      setMsg(e.message ?? "Action failed");
     } finally {
       setBusy(false);
     }

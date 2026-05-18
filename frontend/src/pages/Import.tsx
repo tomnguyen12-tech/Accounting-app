@@ -1,22 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "@/lib/api";
+import { db } from "@/lib/db";
+import { useAuth } from "@/context/AuthContext";
+import { dedupeKey, parseWorkbook, ParsedRow } from "@/lib/excel";
 import { won } from "@/lib/format";
 import { Badge, Button, Card, CardBody, Label, Select, Spinner } from "@/components/ui";
 import type { CardRow, UserRow } from "@/types";
 
-interface PreviewRow {
-  rowIndex: number;
-  transactionDate: string | null;
-  merchantName: string;
-  amount: number;
-  vatAmount: number;
-  cardNumberMasked: string;
-  approvalNumber: string | null;
-  errors: string[];
-  duplicate: boolean;
-  [k: string]: unknown;
-}
+type PreviewRow = ParsedRow & { duplicate: boolean };
 
 interface Preview {
   headers: string[];
@@ -44,6 +35,7 @@ const FIELDS = [
 
 export default function ImportPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -56,22 +48,34 @@ export default function ImportPage() {
   const [result, setResult] = useState<string | null>(null);
 
   useEffect(() => {
-    api.get("/cards").then((r) => setCards(r.data.cards));
-    api.get("/users").then((r) => setUsers(r.data.users));
+    db.listCards().then((r) => setCards(r.cards));
+    db.listUsers().then((r) => setUsers(r.users));
   }, []);
 
   const doPreview = async (override?: Record<string, string | null>) => {
     if (!file) return;
     setBusy(true);
     setResult(null);
-    const fd = new FormData();
-    fd.append("file", file);
-    if (override) fd.append("mapping", JSON.stringify(override));
     try {
-      const { data } = await api.post<Preview>("/import/excel/preview", fd);
-      setPreview(data);
-      // Keep the user's override if they supplied one; else use auto-detected.
-      setMapping(override ?? data.autoMapping);
+      const buffer = await file.arrayBuffer();
+      const parsed = parseWorkbook(buffer, override as any);
+      const dup = await db.excelDuplicates(parsed.rows);
+      const rows: PreviewRow[] = parsed.rows.map((r) => ({
+        ...r,
+        duplicate: r.errors.length === 0 && dup.has(dedupeKey(r)),
+      }));
+      setPreview({
+        headers: parsed.headers,
+        autoMapping: parsed.autoMapping,
+        rows,
+        summary: {
+          total: rows.length,
+          valid: rows.filter((r) => r.errors.length === 0).length,
+          invalid: rows.filter((r) => r.errors.length > 0).length,
+          duplicates: rows.filter((r) => r.duplicate).length,
+        },
+      });
+      setMapping(override ?? (parsed.autoMapping as Record<string, string | null>));
     } finally {
       setBusy(false);
     }
@@ -81,15 +85,15 @@ export default function ImportPage() {
     if (!preview) return;
     setBusy(true);
     try {
-      const { data } = await api.post("/import/excel/commit", {
+      const res = await db.commitExcel({
         fileName: file?.name ?? "upload.xlsx",
         cardId: cardId ? Number(cardId) : undefined,
-        userId: userId ? Number(userId) : undefined,
-        mapping,
+        userId: userId || undefined,
+        createdById: user?.id,
         rows: preview.rows.filter((r) => !r.duplicate && r.errors.length === 0),
       });
       setResult(
-        `가져오기 완료 — 추가 ${data.imported} · 중복 ${data.duplicates} · 오류 ${data.errors}`,
+        `가져오기 완료 — 추가 ${res.imported} · 중복 ${res.duplicates} · 오류 ${res.errors}`,
       );
       setPreview(null);
       setFile(null);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { db } from "@/lib/db";
 import { won, num, fmtDate, currentMonth } from "@/lib/format";
 import { Card, CardBody, Select, Input, Spinner, StatCard } from "@/components/ui";
 import { CategoryPieChart, DailyBarChart } from "@/components/charts";
@@ -7,15 +7,15 @@ import type { UserDashboard, UserRow, Transaction } from "@/types";
 
 export default function MonthlyReport() {
   const [users, setUsers] = useState<UserRow[]>([]);
-  const [userId, setUserId] = useState<number | "">("");
+  const [userId, setUserId] = useState<string>("");
   const [month, setMonth] = useState("2026-03");
   const [data, setData] = useState<UserDashboard | null>(null);
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    api.get("/users").then((r) => {
-      const list: UserRow[] = r.data.users.filter((u: UserRow) => u.role === "USER");
+    db.listUsers().then((r) => {
+      const list: UserRow[] = r.users.filter((u: UserRow) => u.role === "USER");
       setUsers(list);
       if (list.length) setUserId(list[0].id);
     });
@@ -25,12 +25,12 @@ export default function MonthlyReport() {
     if (!userId) return;
     setLoading(true);
     Promise.all([
-      api.get<UserDashboard>(`/dashboard/user/${userId}`, { params: { month } }),
-      api.get("/transactions", { params: { userId, month, pageSize: 200 } }),
+      db.userMonthlyDashboard(userId, month),
+      db.listTransactions({ userId, month, pageSize: 200 }),
     ])
       .then(([d, t]) => {
-        setData(d.data);
-        setTxns(t.data.rows);
+        setData(d);
+        setTxns(t.rows);
       })
       .finally(() => setLoading(false));
   }, [userId, month]);
@@ -45,7 +45,7 @@ export default function MonthlyReport() {
         <div className="flex gap-3">
           <Select
             value={userId}
-            onChange={(e) => setUserId(Number(e.target.value))}
+            onChange={(e) => setUserId(e.target.value)}
             className="w-40"
           >
             {users.map((u) => (

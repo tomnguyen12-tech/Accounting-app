@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "@/lib/api";
+import { db } from "@/lib/db";
 import { won, num, currentMonth } from "@/lib/format";
 import { Card, CardBody, Input, Spinner, StatCard } from "@/components/ui";
 import { CategoryPieChart } from "@/components/charts";
@@ -13,9 +13,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     setLoading(true);
-    api
-      .get<DashboardSummary>("/dashboard/summary", { params: { month } })
-      .then((r) => setData(r.data))
+    db.dashboardSummary(month)
+      .then(setData)
       .finally(() => setLoading(false));
   }, [month]);
 

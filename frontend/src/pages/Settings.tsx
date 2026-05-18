@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { db } from "@/lib/db";
 import { Badge, Button, Card, CardBody, Input, Label, Select, Spinner } from "@/components/ui";
 
 interface Rule {
@@ -18,11 +18,10 @@ export default function Settings() {
 
   const load = () => {
     setLoading(true);
-    api
-      .get("/category-rules")
+    db.listCategoryRules()
       .then((r) => {
-        setRules(r.data.rules);
-        setCategories(r.data.categories);
+        setRules(r.rules);
+        setCategories(r.categories);
       })
       .finally(() => setLoading(false));
   };
@@ -30,18 +29,18 @@ export default function Settings() {
 
   const add = async (e: FormEvent) => {
     e.preventDefault();
-    await api.post("/category-rules", form);
+    await db.createCategoryRule(form);
     setForm({ keyword: "", category: "기타", priority: 50 });
     load();
   };
 
   const toggle = async (rule: Rule) => {
-    await api.put(`/category-rules/${rule.id}`, { active: !rule.active });
+    await db.updateCategoryRule(rule.id, { active: !rule.active });
     load();
   };
 
   const remove = async (id: number) => {
-    await api.delete(`/category-rules/${id}`);
+    await db.deleteCategoryRule(id);
     load();
   };
 

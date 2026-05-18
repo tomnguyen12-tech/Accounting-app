@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { db } from "@/lib/db";
 import { Badge, Button, Card, CardBody, Input, Label, Select, Spinner } from "@/components/ui";
 import type { CardRow, Department, UserRow } from "@/types";
 
@@ -18,11 +18,11 @@ export default function CardsPage() {
 
   const load = () => {
     setLoading(true);
-    Promise.all([api.get("/cards"), api.get("/users"), api.get("/departments")])
+    Promise.all([db.listCards(), db.listUsers(), db.listDepartments()])
       .then(([c, u, d]) => {
-        setCards(c.data.cards);
-        setUsers(u.data.users);
-        setDepts(d.data.departments);
+        setCards(c.cards);
+        setUsers(u.users);
+        setDepts(d.departments);
       })
       .finally(() => setLoading(false));
   };
@@ -32,23 +32,21 @@ export default function CardsPage() {
     e.preventDefault();
     setErr("");
     try {
-      await api.post("/cards", {
+      await db.createCard({
         cardNumber: form.cardNumber,
         issuer: form.issuer || undefined,
-        holderUserId: form.holderUserId ? Number(form.holderUserId) : null,
+        holderUserId: form.holderUserId || null,
         departmentId: form.departmentId ? Number(form.departmentId) : null,
       });
       setForm({ cardNumber: "", issuer: "", holderUserId: "", departmentId: "" });
       load();
     } catch (e: any) {
-      setErr(e.response?.data?.error ?? "Failed");
+      setErr(e.message ?? "Failed");
     }
   };
 
   const assign = async (cardId: number, holderUserId: string) => {
-    await api.put(`/cards/${cardId}`, {
-      holderUserId: holderUserId ? Number(holderUserId) : null,
-    });
+    await db.updateCard(cardId, { holderUserId: holderUserId || null });
     load();
   };
 

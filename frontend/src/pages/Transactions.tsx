@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "@/lib/api";
+import { db } from "@/lib/db";
 import { won, fmtDate, STATUS_STYLES } from "@/lib/format";
 import { Badge, Button, Card, CardBody, Input, Label, Select, Spinner } from "@/components/ui";
 import type { CardRow, Department, TransactionPage, UserRow } from "@/types";
@@ -54,9 +54,9 @@ export default function Transactions() {
   const [depts, setDepts] = useState<Department[]>([]);
 
   useEffect(() => {
-    api.get("/users").then((r) => setUsers(r.data.users));
-    api.get("/cards").then((r) => setCards(r.data.cards));
-    api.get("/departments").then((r) => setDepts(r.data.departments));
+    db.listUsers().then((r) => setUsers(r.users));
+    db.listCards().then((r) => setCards(r.cards));
+    db.listDepartments().then((r) => setDepts(r.departments));
   }, []);
 
   const params = useMemo(() => {
@@ -67,9 +67,8 @@ export default function Transactions() {
 
   useEffect(() => {
     setLoading(true);
-    api
-      .get<TransactionPage>("/transactions", { params })
-      .then((r) => setData(r.data))
+    db.listTransactions(params)
+      .then(setData)
       .finally(() => setLoading(false));
   }, [params]);
 

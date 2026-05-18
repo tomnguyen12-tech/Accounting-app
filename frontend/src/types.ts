@@ -10,8 +10,9 @@ export type TransactionStatus =
 
 export type SourceType = "EXCEL" | "PDF" | "IMAGE" | "MANUAL";
 
+// user ids are Supabase Auth UUIDs (strings); other entities use numeric ids.
 export interface AuthUser {
-  id: number;
+  id: string;
   email: string;
   name: string;
   role: Role;
@@ -23,7 +24,7 @@ export interface Department {
 }
 
 export interface UserRow {
-  id: number;
+  id: string;
   email: string;
   name: string;
   role: Role;
@@ -38,7 +39,7 @@ export interface CardRow {
   last4: string;
   issuer?: string | null;
   active: boolean;
-  holder?: { id: number; name: string } | null;
+  holder?: { id: string; name: string } | null;
   department?: Department | null;
   _count: { transactions: number };
 }
@@ -62,7 +63,7 @@ export interface Transaction {
   sourceType: SourceType;
   confidenceScore?: number | null;
   status: TransactionStatus;
-  user?: { id: number; name: string } | null;
+  user?: { id: string; name: string } | null;
   department?: Department | null;
   card?: { id: number; cardNumberMasked: string } | null;
   reviewLogs?: ReviewLog[];
