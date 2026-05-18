@@ -6,8 +6,6 @@
 -- ============================================================================
 
 -- ---------- reset (an toàn khi chạy lại) ----------
-drop trigger if exists on_auth_user_created on auth.users;
-drop function if exists public.handle_new_user();
 drop table if exists public.review_logs    cascade;
 drop table if exists public.transactions   cascade;
 drop table if exists public.import_jobs    cascade;
