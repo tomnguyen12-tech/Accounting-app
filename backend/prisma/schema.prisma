@@ -1,0 +1,221 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  ACCOUNTANT
+  USER
+}
+
+enum TransactionStatus {
+  DRAFT
+  AI_EXTRACTED
+  SUBMITTED
+  NEEDS_REVISION
+  APPROVED
+  REJECTED
+}
+
+enum SourceType {
+  EXCEL
+  PDF
+  IMAGE
+  MANUAL
+}
+
+enum ImportType {
+  EXCEL
+  PDF
+  IMAGE
+}
+
+enum ImportStatus {
+  PENDING
+  PARSED
+  COMPLETED
+  FAILED
+}
+
+enum ReviewAction {
+  SUBMIT
+  APPROVE
+  REJECT
+  REQUEST_REVISION
+  EDIT
+}
+
+model Department {
+  id           Int           @id @default(autoincrement())
+  name         String        @unique
+  createdAt    DateTime      @default(now())
+  users        User[]
+  cards        CorporateCard[]
+  transactions Transaction[]
+
+  @@map("departments")
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  email        String        @unique
+  passwordHash String        @map("password_hash")
+  name         String
+  role         Role          @default(USER)
+  departmentId Int?          @map("department_id")
+  department   Department?   @relation(fields: [departmentId], references: [id])
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  cards        CorporateCard[]
+  transactions Transaction[]
+  importJobs   ImportJob[]
+  receiptFiles ReceiptFile[]
+  reviewLogs   ReviewLog[]
+
+  @@map("users")
+}
+
+model CorporateCard {
+  id               Int           @id @default(autoincrement())
+  cardNumberMasked String        @map("card_number_masked")
+  last4            String
+  issuer           String?
+  holderUserId     Int?          @map("holder_user_id")
+  holder           User?         @relation(fields: [holderUserId], references: [id])
+  departmentId     Int?          @map("department_id")
+  department       Department?   @relation(fields: [departmentId], references: [id])
+  active           Boolean       @default(true)
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  transactions     Transaction[]
+
+  @@unique([cardNumberMasked])
+  @@map("corporate_cards")
+}
+
+model Transaction {
+  id               Int               @id @default(autoincrement())
+  userId           Int?              @map("user_id")
+  user             User?             @relation(fields: [userId], references: [id])
+  departmentId     Int?              @map("department_id")
+  department       Department?       @relation(fields: [departmentId], references: [id])
+  cardId           Int?              @map("card_id")
+  card             CorporateCard?    @relation(fields: [cardId], references: [id])
+
+  transactionDate  DateTime          @map("transaction_date")
+  approvalDate     DateTime?         @map("approval_date")
+  paymentDate      DateTime?         @map("payment_date")
+
+  cardNumberMasked String            @map("card_number_masked")
+  approvalNumber   String?           @map("approval_number")
+  merchantName     String            @map("merchant_name")
+  merchantNumber   String?           @map("merchant_number")
+
+  amount           Int
+  vatAmount        Int               @default(0) @map("vat_amount")
+  discountAmount   Int               @default(0) @map("discount_amount")
+  exchangeFee      Int               @default(0) @map("exchange_fee")
+  cancelStatus     String?           @map("cancel_status")
+  transactionType  String?           @map("transaction_type")
+  salesType        String?           @map("sales_type")
+
+  category         String?
+  purpose          String            @default("")
+  memo             String            @default("")
+
+  sourceType       SourceType        @default(EXCEL) @map("source_type")
+  sourceFileId     Int?              @map("source_file_id")
+  sourceFile       ReceiptFile?      @relation(fields: [sourceFileId], references: [id])
+  importJobId      Int?              @map("import_job_id")
+  importJob        ImportJob?        @relation(fields: [importJobId], references: [id])
+
+  confidenceScore  Float?            @map("confidence_score")
+  status           TransactionStatus @default(AI_EXTRACTED)
+
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  reviewLogs       ReviewLog[]
+
+  // Natural key used for duplicate detection on import.
+  @@unique([cardNumberMasked, approvalNumber, amount, transactionDate], name: "dedupeKey")
+  @@index([userId])
+  @@index([cardId])
+  @@index([transactionDate])
+  @@index([category])
+  @@index([status])
+  @@map("transactions")
+}
+
+model ReceiptFile {
+  id           Int           @id @default(autoincrement())
+  filename     String
+  storedPath   String        @map("stored_path")
+  mimeType     String        @map("mime_type")
+  size         Int
+  uploadedById Int?          @map("uploaded_by_id")
+  uploadedBy   User?         @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  transactions Transaction[]
+  importJobs   ImportJob[]
+
+  @@map("receipt_files")
+}
+
+model ImportJob {
+  id            Int           @id @default(autoincrement())
+  type          ImportType
+  status        ImportStatus  @default(PENDING)
+  fileId        Int?          @map("file_id")
+  file          ReceiptFile?  @relation(fields: [fileId], references: [id])
+  originalName  String        @map("original_name")
+  totalRows     Int           @default(0) @map("total_rows")
+  importedRows  Int           @default(0) @map("imported_rows")
+  duplicateRows Int           @default(0) @map("duplicate_rows")
+  errorRows     Int           @default(0) @map("error_rows")
+  log           Json?
+  createdById   Int?          @map("created_by_id")
+  createdBy     User?         @relation(fields: [createdById], references: [id])
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  transactions  Transaction[]
+
+  @@map("import_jobs")
+}
+
+model CategoryRule {
+  id        Int      @id @default(autoincrement())
+  keyword   String
+  category  String
+  priority  Int      @default(100)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([active])
+  @@map("category_rules")
+}
+
+model ReviewLog {
+  id            Int          @id @default(autoincrement())
+  transactionId Int          @map("transaction_id")
+  transaction   Transaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  action        ReviewAction
+  fromStatus    TransactionStatus? @map("from_status")
+  toStatus      TransactionStatus? @map("to_status")
+  comment       String?
+  reviewerId    Int?         @map("reviewer_id")
+  reviewer      User?        @relation(fields: [reviewerId], references: [id])
+  createdAt     DateTime     @default(now()) @map("created_at")
+
+  @@index([transactionId])
+  @@map("review_logs")
+}
