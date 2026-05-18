@@ -18,19 +18,18 @@ export default function UsersPage() {
       <div>
         <h1 className="text-2xl font-bold">사용자 관리 / Users</h1>
         <p className="text-sm text-slate-500">
-          Supabase Auth 기준 — 사용자는 로그인 화면의 "계정 만들기"로 가입합니다
+          데모 모드 — 사용자는 schema.sql 시드로 생성됩니다 (인증/이메일 없음)
         </p>
       </div>
 
       <Card>
         <CardBody className="text-sm text-slate-600">
-          <p className="font-medium text-slate-700">계정 생성 안내 / Creating accounts</p>
+          <p className="font-medium text-slate-700">데모 계정 / Seeded accounts</p>
           <p className="mt-1">
-            인증은 <b>Supabase Auth</b>가 담당합니다. 새 사용자는 로그인 페이지의{" "}
-            <b>"계정 만들기 / Sign up"</b>으로 직접 가입하세요. 데모 이메일
-            (<code>admin@demo.io</code>, <code>acct@demo.io</code>, <code>kevin@demo.io</code>,{" "}
-            <code>sora@demo.io</code>)로 가입하면 역할·부서가 자동 지정되고, Kevin은
-            시드된 카드/3월 거래가 자동 연결됩니다.
+            <code>admin@demo.io</code> (ADMIN), <code>acct@demo.io</code> (ACCOUNTANT),{" "}
+            <code>kevin@demo.io</code> (USER·Sales — 카드 + 3월 49건 연결),{" "}
+            <code>sora@demo.io</code> (USER·Engineering). 로그인 화면에서 클릭 후 바로
+            로그인하세요 (비밀번호 검증 없음).
           </p>
         </CardBody>
       </Card>

@@ -10,9 +10,8 @@ const DEMO = [
 ];
 
 export default function Login() {
-  const { login, signup } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("kevin@demo.io");
   const [password, setPassword] = useState("kevin123");
   const [error, setError] = useState("");
@@ -23,11 +22,10 @@ export default function Login() {
     setBusy(true);
     setError("");
     try {
-      if (mode === "signup") await signup(email, password);
-      else await login(email, password);
+      await login(email, password);
       navigate("/");
     } catch (err: any) {
-      setError(err.message ?? (mode === "signup" ? "Sign up failed" : "Login failed"));
+      setError(err.message ?? "Login failed");
     } finally {
       setBusy(false);
     }
@@ -42,27 +40,7 @@ export default function Login() {
               E
             </div>
             <h1 className="text-xl font-bold">Expense Assistant</h1>
-            <p className="text-sm text-slate-500">
-              AI 법인카드 경비 관리 · {mode === "signup" ? "계정 만들기" : "로그인"}
-            </p>
-          </div>
-          <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 text-sm">
-            <button
-              onClick={() => setMode("login")}
-              className={`rounded-lg py-1.5 font-medium ${
-                mode === "login" ? "bg-white shadow-sm text-brand-600" : "text-slate-500"
-              }`}
-            >
-              로그인 / Sign in
-            </button>
-            <button
-              onClick={() => setMode("signup")}
-              className={`rounded-lg py-1.5 font-medium ${
-                mode === "signup" ? "bg-white shadow-sm text-brand-600" : "text-slate-500"
-              }`}
-            >
-              계정 만들기 / Sign up
-            </button>
+            <p className="text-sm text-slate-500">AI 법인카드 경비 관리 · 데모 로그인</p>
           </div>
           <form onSubmit={submit} className="space-y-4">
             <div>
@@ -79,16 +57,12 @@ export default function Login() {
             </div>
             {error && <p className="text-sm text-rose-600">{error}</p>}
             <Button className="w-full" disabled={busy}>
-              {busy
-                ? "처리 중…"
-                : mode === "signup"
-                  ? "계정 만들기 / Sign up"
-                  : "로그인 / Sign in"}
+              {busy ? "처리 중…" : "로그인 / Sign in"}
             </Button>
           </form>
           <div className="mt-6 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
             <p className="mb-1 font-medium text-slate-600">
-              데모 계정 — 최초 1회 "계정 만들기"로 가입 후 로그인
+              데모 계정 (클릭 후 로그인 — 비밀번호 검증 없음)
             </p>
             {DEMO.map((d) => (
               <button

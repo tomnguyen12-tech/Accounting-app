@@ -6,67 +6,56 @@ interface AuthCtx {
   user: AuthUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
 const Ctx = createContext<AuthCtx>(null!);
+const KEY = "demo_user";
 
-async function loadProfile(): Promise<AuthUser | null> {
-  const { data: sess } = await supabase.auth.getSession();
-  const authUser = sess.session?.user;
-  if (!authUser) return null;
-  const { data: profile } = await supabase
-    .from("users")
-    .select("id,email,name,role")
-    .eq("id", authUser.id)
-    .single();
-  return (
-    profile ?? {
-      id: authUser.id,
-      email: authUser.email ?? "",
-      name: authUser.email?.split("@")[0] ?? "User",
-      role: "USER",
-    }
-  );
-}
-
+/**
+ * DEMO MODE — no Supabase Auth / no email confirmation.
+ * "Login" simply looks up a seeded profile by email (password not enforced).
+ * Data access works because RLS is open to the publishable key.
+ */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadProfile()
-      .then(setUser)
-      .finally(() => setLoading(false));
-    const { data: sub } = supabase.auth.onAuthStateChange(() => {
-      loadProfile().then(setUser);
-    });
-    return () => sub.subscription.unsubscribe();
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      try {
+        setUser(JSON.parse(raw));
+      } catch {
+        localStorage.removeItem(KEY);
+      }
+    }
+    setLoading(false);
   }, []);
 
-  const login = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const login = async (email: string, _password: string) => {
+    const { data, error } = await supabase
+      .from("users")
+      .select("id,email,name,role")
+      .eq("email", email.trim().toLowerCase())
+      .maybeSingle();
     if (error) throw new Error(error.message);
-    setUser(await loadProfile());
+    if (!data)
+      throw new Error(
+        "Tài khoản không tồn tại. Bạn đã chạy supabase/schema.sql chưa?",
+      );
+    const u: AuthUser = data as AuthUser;
+    localStorage.setItem(KEY, JSON.stringify(u));
+    setUser(u);
   };
 
-  const signup = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) throw new Error(error.message);
-    // If email confirmation is disabled, a session is created immediately.
-    setUser(await loadProfile());
-  };
-
-  const logout = async () => {
-    await supabase.auth.signOut();
+  const logout = () => {
+    localStorage.removeItem(KEY);
     setUser(null);
     location.href = "/login";
   };
 
-  return (
-    <Ctx.Provider value={{ user, loading, login, signup, logout }}>{children}</Ctx.Provider>
-  );
+  return <Ctx.Provider value={{ user, loading, login, logout }}>{children}</Ctx.Provider>;
 }
 
 export const useAuth = () => useContext(Ctx);
