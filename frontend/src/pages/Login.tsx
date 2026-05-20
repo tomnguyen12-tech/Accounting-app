@@ -3,17 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button, Card, CardBody, Input, Label } from "@/components/ui";
 
-const DEMO = [
-  { role: "Admin", email: "admin@demo.io", pw: "admin123" },
-  { role: "Accountant", email: "acct@demo.io", pw: "acct123" },
-  { role: "User · Kevin", email: "kevin@demo.io", pw: "kevin123" },
-];
-
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("kevin@demo.io");
-  const [password, setPassword] = useState("kevin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -56,27 +50,10 @@ export default function Login() {
               />
             </div>
             {error && <p className="text-sm text-rose-600">{error}</p>}
-            <Button className="w-full" disabled={busy}>
+            <Button className="w-full" disabled={busy || !email}>
               {busy ? "처리 중…" : "로그인 / Sign in"}
             </Button>
           </form>
-          <div className="mt-6 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
-            <p className="mb-1 font-medium text-slate-600">
-              데모 계정 (클릭 후 로그인 — 비밀번호 검증 없음)
-            </p>
-            {DEMO.map((d) => (
-              <button
-                key={d.email}
-                onClick={() => {
-                  setEmail(d.email);
-                  setPassword(d.pw);
-                }}
-                className="block w-full text-left hover:text-brand-600"
-              >
-                {d.role} — {d.email} / {d.pw}
-              </button>
-            ))}
-          </div>
         </CardBody>
       </Card>
     </div>

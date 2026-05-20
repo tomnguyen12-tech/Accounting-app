@@ -72,19 +72,8 @@ npm install
 npm run dev                 # http://localhost:5173
 ```
 
-**Demo logins**
-
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | `admin@demo.io` | `admin123` |
-| Accountant | `acct@demo.io` | `acct123` |
-| User (Kevin) | `kevin@demo.io` | `kevin123` |
+**Sign in:** credentials are not published — see DEPLOY.md for how to seed accounts in your own Supabase project.
 
 ## Quick start
 
-1. **PostgreSQL** — `docker compose up -d` (exposes `localhost:5432`, db `expense`).
-   No Docker? Point `DATABASE_URL` in `backend/.env` at any Postgres 14+.
-2. **Backend** — `cd backend && cp .env.example .env && npm i && npm run prisma:migrate && npm run seed && npm run dev`
-3. **Frontend** — `cd frontend && npm i && npm run dev`, open http://localhost:5173, log in as `kevin@demo.io / kevin123`.
-
-The dashboard reproduces the spec example: *Kevin 3월 카드 이용내역 요약* — 총 사용금액 6,058,150원 / 49건 / 4835-****-****-7498.
+Current architecture is **frontend-only** (Vite + Supabase). See **`DEPLOY.md`** for the up-to-date steps (run `supabase/schema.sql` in Supabase, configure `frontend/.env`, `npm run dev`).

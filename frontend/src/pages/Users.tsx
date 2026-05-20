@@ -24,12 +24,11 @@ export default function UsersPage() {
 
       <Card>
         <CardBody className="text-sm text-slate-600">
-          <p className="font-medium text-slate-700">데모 계정 / Seeded accounts</p>
+          <p className="font-medium text-slate-700">계정 생성 / Creating accounts</p>
           <p className="mt-1">
-            <code>admin@demo.io</code> (ADMIN), <code>acct@demo.io</code> (ACCOUNTANT),{" "}
-            <code>kevin@demo.io</code> (USER·Sales — 카드 + 3월 49건 연결),{" "}
-            <code>sora@demo.io</code> (USER·Engineering). 로그인 화면에서 클릭 후 바로
-            로그인하세요 (비밀번호 검증 없음).
+            인증은 데모 모드입니다 — 새 사용자는 SQL Editor 또는{" "}
+            <code>supabase/schema.sql</code>의 seed 블록을 통해 추가하세요. 비밀번호는
+            검증되지 않으며, 이메일이 <code>users</code> 테이블에 존재하면 로그인됩니다.
           </p>
         </CardBody>
       </Card>

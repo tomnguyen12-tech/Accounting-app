@@ -33,17 +33,12 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
-Mở **http://localhost:5173** → ở khung "데모 계정" bấm dòng **Kevin** → bấm
-**로그인 / Sign in** → vào **월별 리포트** → thấy *Kevin 3월 … 6,058,150원 / 49건* + biểu đồ tròn.
+Mở **http://localhost:5173** → nhập email của một profile có trong bảng `users`
+(xem Bước 1 — bạn tự chọn email khi seed) → bấm **로그인 / Sign in**.
 
-| Click để đăng nhập | Vai trò |
-|---|---|
-| `kevin@demo.io` | USER (Sales) — có thẻ + 49 giao dịch 3월 |
-| `admin@demo.io` | ADMIN |
-| `acct@demo.io`  | ACCOUNTANT |
-
-> Không cần đăng ký, không cần email, không cần mật khẩu đúng — chỉ cần email
-> tồn tại trong bảng `users` (đã seed ở Bước 1).
+> ⚠️ Demo mode: mật khẩu **không được kiểm tra**, chỉ cần email khớp 1 dòng trong
+> bảng `users`. Vì vậy **không nên đẩy email login lên repo public**. Muốn an toàn
+> thật thì bật lại Supabase Auth (xem lịch sử commit trước đây).
 
 ## Bước 4 — Deploy Vercel (chỉ 1 project frontend)
 

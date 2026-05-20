@@ -177,21 +177,17 @@ grant usage on schema public to anon, authenticated;
 grant all on all tables in schema public to anon, authenticated;
 grant all on all sequences in schema public to anon, authenticated;
 
--- ---------- seed: departments / users / cards / rules ----------
+-- ---------- seed: departments / admin / cards / rules ----------
+-- Minimal seed: only the admin login. Add other users/cards via the app
+-- or with your own SQL — do not check credentials into source control.
 insert into public.departments (name) values ('Sales'),('Engineering'),('Marketing');
 
 insert into public.users (id,email,name,role,department_id) values
-  ('11111111-1111-1111-1111-111111111111','admin@demo.io','Admin','ADMIN',null),
-  ('22222222-2222-2222-2222-222222222222','acct@demo.io','Accountant','ACCOUNTANT',null),
-  ('33333333-3333-3333-3333-333333333333','kevin@demo.io','Kevin','USER',
-     (select id from public.departments where name='Sales')),
-  ('44444444-4444-4444-4444-444444444444','sora@demo.io','Sora','USER',
-     (select id from public.departments where name='Engineering'));
+  ('11111111-1111-1111-1111-111111111111','admin@demo.io','Admin','ADMIN',null);
 
 insert into public.corporate_cards (card_number_masked,last4,issuer,holder_user_id,department_id)
 values
-  ('4835-****-****-7498','7498','Shinhan Card',
-     '33333333-3333-3333-3333-333333333333',
+  ('4835-****-****-7498','7498','Shinhan Card', null,
      (select id from public.departments where name='Sales')),
   ('5210-****-****-1043','1043','Hyundai Card', null,
      (select id from public.departments where name='Engineering'));
@@ -210,56 +206,5 @@ insert into public.category_rules (keyword,category,priority) values
   ('키보드','사무용품',10),('마우스','사무용품',10),('다이소','사무용품',10),
   ('CGV','레저',20),('메가박스','레저',20),('골프','레저',20),('스크린','레저',20);
 
--- ---------- seed: Kevin's March-2026 statement (exactly 6,058,150원 / 49건) ----------
-do $$
-declare
-  v_card  bigint;
-  v_dept  bigint;
-  v_user  uuid := '33333333-3333-3333-3333-333333333333';
-  cats    text[]   := array['식음료','숙박/여행','레저','교통','기타'];
-  totals  bigint[] := array[2916250,1585000,1074000,440900,42000];
-  counts  int[]    := array[22,6,8,11,2];
-  merch   jsonb := '{
-    "식음료":["텀블러비어역삼직영점","스타벅스역삼점","투썸플레이스강남","커피빈선릉","교촌치킨역삼","노량진수산횟집","김밥천국","이디야커피"],
-    "숙박/여행":["제주신라호텔","롯데호텔서울","한화리조트제주"],
-    "레저":["CGV강남","골프존역삼","스크린골프"],
-    "교통":["카카오택시","티머니교통","GS칼텍스주유소","강남공영주차장"],
-    "기타":["다이소역삼점","무인양품"]}';
-  ci int; i int; n int; base bigint; running bigint; amt bigint; wobble bigint;
-  d int; created int := 0; mlist jsonb; mname text; st transaction_status; conf double precision;
-begin
-  select id into v_card from public.corporate_cards where card_number_masked='4835-****-****-7498';
-  select id into v_dept from public.departments where name='Sales';
-
-  for ci in 1..array_length(cats,1) loop
-    n := counts[ci]; base := (totals[ci]/n/100)*100; running := 0;
-    mlist := merch -> cats[ci];
-    for i in 1..n loop
-      if i < n then
-        wobble := (((i-1) % 5) - 2) * 5000;
-        amt := greatest(5000, base + wobble);
-        running := running + amt;
-      else
-        amt := totals[ci] - running;
-      end if;
-      d := ((created * 3) % 31) + 1;
-      mname := mlist ->> ((i-1) % jsonb_array_length(mlist));
-      if created % 9 = 0 then st := 'NEEDS_REVISION'; conf := 0.55;
-      else st := 'AI_EXTRACTED'; conf := 0.92; end if;
-
-      insert into public.transactions
-        (user_id, department_id, card_id, transaction_date, approval_date,
-         payment_date, card_number_masked, approval_number, merchant_name,
-         merchant_number, amount, vat_amount, category, source_type,
-         confidence_score, status)
-      values
-        (v_user, v_dept, v_card,
-         make_date(2026,3, least(d,31)), make_date(2026,3, least(d,31)) + 1,
-         make_date(2026,4,15), '4835-****-****-7498',
-         (30000000 + created*137 + 19)::text, mname,
-         (94586000 + created)::text, amt, round(amt/11.0), cats[ci], 'EXCEL',
-         conf, st);
-      created := created + 1;
-    end loop;
-  end loop;
-end $$;
+-- (Transaction data is no longer seeded — import via the app for a clean,
+--  traceable history. See supabase/_wipe_data.sql to reset later.)
