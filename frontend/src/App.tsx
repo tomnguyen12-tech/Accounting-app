@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import Transactions from "./pages/Transactions";
 import TransactionDetail from "./pages/TransactionDetail";
 import ImportPage from "./pages/Import";
+import ImportJobs from "./pages/ImportJobs";
 import MonthlyReport from "./pages/MonthlyReport";
 import UsersPage from "./pages/Users";
 import CardsPage from "./pages/Cards";
@@ -36,6 +37,7 @@ export default function App() {
             <Route path="/transactions" element={<Transactions />} />
             <Route path="/transactions/:id" element={<TransactionDetail />} />
             <Route path="/import" element={<ImportPage />} />
+            <Route path="/import-jobs" element={<ImportJobs />} />
             <Route path="/report" element={<MonthlyReport />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/cards" element={<CardsPage />} />

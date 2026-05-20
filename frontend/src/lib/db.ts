@@ -6,6 +6,8 @@ import type {
   CategorySlice,
   DashboardSummary,
   Department,
+  ImportJob,
+  ReportSummary,
   Transaction,
   TransactionPage,
   UserDashboard,
@@ -67,6 +69,7 @@ const mapTx = (r: any): Transaction => ({
   user: r.user ? { id: r.user.id, name: r.user.name } : null,
   department: r.department ? { id: r.department.id, name: r.department.name } : null,
   card: r.card ? { id: r.card.id, cardNumberMasked: r.card.card_number_masked } : null,
+  importJob: r.import_job ? { id: r.import_job.id, originalName: r.import_job.original_name } : null,
   reviewLogs: (r.review_logs ?? []).map((l: any) => ({
     id: l.id,
     action: l.action,
@@ -79,7 +82,7 @@ const mapTx = (r: any): Transaction => ({
 });
 
 const TX_SELECT =
-  "*, user:users(id,name), department:departments(id,name), card:corporate_cards(id,card_number_masked)";
+  "*, user:users(id,name), department:departments(id,name), card:corporate_cards(id,card_number_masked), import_job:import_jobs(id,original_name)";
 
 export const db = {
   async listDepartments(): Promise<{ departments: Department[] }> {
@@ -124,14 +127,16 @@ export const db = {
     };
   },
 
-  async listCards(): Promise<{ cards: CardRow[] }> {
+  async listCards(opts: { userId?: string } = {}): Promise<{ cards: CardRow[] }> {
+    let query = supabase
+      .from("corporate_cards")
+      .select(
+        "id,card_number_masked,last4,issuer,active,holder_user_id, holder:users(id,name), department:departments(id,name)",
+      )
+      .order("id");
+    if (opts.userId) query = query.eq("holder_user_id", opts.userId);
     const [{ data, error }, { data: txs }] = await Promise.all([
-      supabase
-        .from("corporate_cards")
-        .select(
-          "id,card_number_masked,last4,issuer,active, holder:users(id,name), department:departments(id,name)",
-        )
-        .order("id"),
+      query,
       supabase.from("transactions").select("card_id"),
     ]);
     if (error) throw error;
@@ -201,6 +206,7 @@ export const db = {
       if (has("category")) q = q.eq("category", String(f.category));
       if (has("status")) q = q.eq("status", String(f.status));
       if (has("sourceType")) q = q.eq("source_type", String(f.sourceType));
+      if (has("importJobId")) q = q.eq("import_job_id", Number(f.importJobId));
       if (has("merchant")) q = q.ilike("merchant_name", `%${f.merchant}%`);
       if (has("minAmount")) q = q.gte("amount", Number(f.minAmount));
       if (has("maxAmount")) q = q.lte("amount", Number(f.maxAmount));
@@ -480,32 +486,69 @@ export const db = {
 
   async commitExcel(input: {
     fileName: string;
-    cardId?: number;
-    userId?: string;
+    userId: string;                  // required (req #1)
+    cardId?: number | null;          // optional (req #2)
+    importMonth?: string | null;
+    dateFrom?: string | null;
+    dateTo?: string | null;
     rows: ParsedRow[];
     createdById?: string;
   }) {
+    if (!input.userId) throw new Error("User (owner) is required to import");
+
     const { data: rules } = await supabase
       .from("category_rules")
       .select("keyword,category,priority")
       .eq("active", true);
-    let card: any = null;
+
+    // Resolve card: explicit selection wins; otherwise try to detect from rows.
+    let card: { id: number; holder_user_id: string | null; department_id: number | null } | null =
+      null;
     if (input.cardId) {
       const { data } = await supabase
         .from("corporate_cards")
         .select("id,holder_user_id,department_id")
         .eq("id", input.cardId)
         .single();
-      card = data;
+      card = data ?? null;
+    } else {
+      const masks = [...new Set(input.rows.map((r) => r.cardNumberMasked).filter(Boolean))];
+      if (masks.length === 1) {
+        const { data } = await supabase
+          .from("corporate_cards")
+          .select("id,holder_user_id,department_id")
+          .eq("card_number_masked", masks[0])
+          .maybeSingle();
+        if (data) card = data;
+      }
     }
+
+    // Infer period if caller didn't supply one.
+    let { dateFrom, dateTo, importMonth } = input;
+    if (!dateFrom || !dateTo) {
+      const dates = input.rows
+        .map((r) => r.transactionDate)
+        .filter((d): d is string => !!d)
+        .sort();
+      dateFrom = dateFrom ?? dates[0] ?? null;
+      dateTo = dateTo ?? dates[dates.length - 1] ?? null;
+    }
+    if (!importMonth && dateFrom) importMonth = dateFrom.slice(0, 7);
+
     const { data: job } = await supabase
       .from("import_jobs")
       .insert({
         type: "EXCEL",
         original_name: input.fileName,
+        file_path: input.fileName,
+        user_id: input.userId,
+        card_id: card?.id ?? null,
+        import_month: importMonth ?? null,
+        date_from: dateFrom ?? null,
+        date_to: dateTo ?? null,
         total_rows: input.rows.length,
-        created_by_id: input.createdById ?? null,
-        status: "COMPLETED",
+        created_by_id: input.createdById ?? input.userId,
+        status: "CONFIRMED",
       })
       .select("id")
       .single();
@@ -514,7 +557,7 @@ export const db = {
     let imported = 0;
     let duplicates = 0;
     let errors = 0;
-    const toInsert: any[] = [];
+    const toInsert: Record<string, unknown>[] = [];
     for (const r of input.rows) {
       if (r.errors.length) {
         errors++;
@@ -526,7 +569,7 @@ export const db = {
       }
       const cls = classify(r.merchantName, rules ?? []);
       toInsert.push({
-        user_id: input.userId ?? card?.holder_user_id ?? null,
+        user_id: input.userId,                          // always the selected owner
         department_id: card?.department_id ?? null,
         card_id: card?.id ?? null,
         transaction_date: r.transactionDate,
@@ -558,9 +601,157 @@ export const db = {
     if (job?.id)
       await supabase
         .from("import_jobs")
-        .update({ imported_rows: imported, duplicate_rows: duplicates, error_rows: errors })
+        .update({
+          imported_rows: imported,
+          duplicate_rows: duplicates,
+          error_rows: errors,
+          success_count: imported,
+          failed_count: errors,
+        })
         .eq("id", job.id);
-    return { imported, duplicates, errors };
+    return { jobId: job?.id ?? null, imported, duplicates, errors };
+  },
+
+  // ---- Import jobs (req #3, #11.8, #12.4) -------------------------------
+
+  async listImportJobs(opts: {
+    userId?: string;
+    cardId?: number;
+    dateFrom?: string;
+    dateTo?: string;
+  } = {}): Promise<{ jobs: ImportJob[] }> {
+    let q = supabase
+      .from("import_jobs")
+      .select(
+        "*, user:users(id,name), card:corporate_cards(id,card_number_masked)",
+      )
+      .order("created_at", { ascending: false });
+    if (opts.userId) q = q.eq("user_id", opts.userId);
+    if (opts.cardId) q = q.eq("card_id", opts.cardId);
+    if (opts.dateFrom) q = q.gte("created_at", opts.dateFrom);
+    if (opts.dateTo) q = q.lte("created_at", `${opts.dateTo}T23:59:59`);
+    const { data, error } = await q;
+    if (error) throw error;
+    return {
+      jobs: (data ?? []).map((r: any) => ({
+        id: r.id,
+        userId: r.user_id,
+        cardId: r.card_id,
+        type: r.type,
+        status: r.status,
+        originalName: r.original_name,
+        filePath: r.file_path,
+        importMonth: r.import_month,
+        dateFrom: r.date_from,
+        dateTo: r.date_to,
+        totalRows: r.total_rows,
+        successCount: r.success_count ?? r.imported_rows ?? 0,
+        failedCount: r.failed_count ?? r.error_rows ?? 0,
+        duplicateRows: r.duplicate_rows ?? 0,
+        createdAt: r.created_at,
+        user: r.user ? { id: r.user.id, name: r.user.name } : null,
+        card: r.card ? { id: r.card.id, cardNumberMasked: r.card.card_number_masked } : null,
+      })),
+    };
+  },
+
+  // ---- Report summary (req #6) ------------------------------------------
+
+  async reportSummary(f: {
+    userId?: string;
+    cardId?: number;
+    startDate: string;
+    endDate: string;
+  }): Promise<ReportSummary> {
+    let q = supabase
+      .from("transactions")
+      .select(
+        "amount,category,merchant_name,transaction_date,user_id,card_id, user:users(id,name), card:corporate_cards(id,card_number_masked)",
+      )
+      .gte("transaction_date", f.startDate)
+      .lte("transaction_date", f.endDate);
+    if (f.userId) q = q.eq("user_id", f.userId);
+    if (f.cardId) q = q.eq("card_id", f.cardId);
+    const { data, error } = await q;
+    if (error) throw error;
+    const rows = (data ?? []) as any[];
+
+    const totalAmount = rows.reduce((a, r) => a + Number(r.amount), 0);
+
+    const byCat = new Map<string, { amount: number; count: number }>();
+    const byMerchant = new Map<string, { amount: number; count: number }>();
+    const byDay = new Map<string, number>();
+    for (const r of rows) {
+      const c = r.category ?? "기타";
+      const e = byCat.get(c) ?? { amount: 0, count: 0 };
+      e.amount += Number(r.amount);
+      e.count++;
+      byCat.set(c, e);
+
+      const m = byMerchant.get(r.merchant_name) ?? { amount: 0, count: 0 };
+      m.amount += Number(r.amount);
+      m.count++;
+      byMerchant.set(r.merchant_name, m);
+
+      const d = String(r.transaction_date);
+      byDay.set(d, (byDay.get(d) ?? 0) + Number(r.amount));
+    }
+    const largest = [...rows].sort((a, b) => Number(b.amount) - Number(a.amount))[0];
+
+    // Echo the selected user/card from rows when available (else fetch).
+    let user: ReportSummary["user"] = rows[0]?.user
+      ? { id: rows[0].user.id, name: rows[0].user.name }
+      : null;
+    let card: ReportSummary["card"] = rows[0]?.card
+      ? { id: rows[0].card.id, cardNumberMasked: rows[0].card.card_number_masked }
+      : null;
+    if (!user && f.userId) {
+      const { data: u } = await supabase
+        .from("users")
+        .select("id,name")
+        .eq("id", f.userId)
+        .single();
+      if (u) user = u as any;
+    }
+    if (!card && f.cardId) {
+      const { data: c } = await supabase
+        .from("corporate_cards")
+        .select("id,card_number_masked")
+        .eq("id", f.cardId)
+        .single();
+      if (c) card = { id: c.id, cardNumberMasked: c.card_number_masked };
+    }
+
+    return {
+      user,
+      card,
+      period: { startDate: f.startDate, endDate: f.endDate },
+      totalAmount,
+      transactionCount: rows.length,
+      categoryBreakdown: [...byCat.entries()]
+        .map(([category, v]) => ({
+          category,
+          label: CATEGORY_LABELS[category] ?? "Others",
+          amount: v.amount,
+          count: v.count,
+          percentage: totalAmount ? Number(((v.amount / totalAmount) * 100).toFixed(1)) : 0,
+        }))
+        .sort((a, b) => b.amount - a.amount),
+      topMerchants: [...byMerchant.entries()]
+        .map(([merchantName, v]) => ({ merchantName, ...v }))
+        .sort((a, b) => b.amount - a.amount)
+        .slice(0, 5),
+      largestTransaction: largest
+        ? {
+            merchantName: largest.merchant_name,
+            amount: Number(largest.amount),
+            transactionDate: largest.transaction_date,
+          }
+        : null,
+      dailySpending: [...byDay.entries()]
+        .map(([date, amount]) => ({ date: date.slice(5), amount }))
+        .sort((a, b) => a.date.localeCompare(b.date)),
+    };
   },
 };
 

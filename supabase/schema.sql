@@ -65,26 +65,41 @@ create table public.receipt_files (
   mime_type       text not null,
   size            int  not null default 0,
   uploaded_by_id  uuid references public.users(id),
+  user_id         uuid references public.users(id),
+  card_id         bigint references public.corporate_cards(id),
+  -- FKs to import_jobs / transactions are added below (forward-reference).
+  import_job_id   bigint,
+  transaction_id  bigint,
   created_at      timestamptz not null default now()
 );
 
 create table public.import_jobs (
   id              bigint generated always as identity primary key,
+  user_id         uuid not null references public.users(id),
+  card_id         bigint references public.corporate_cards(id),
   type            source_type not null default 'EXCEL',
   status          text not null default 'COMPLETED',
   original_name   text not null,
+  file_path       text,
+  import_month    text,
+  date_from       date,
+  date_to         date,
   total_rows      int not null default 0,
   imported_rows   int not null default 0,
   duplicate_rows  int not null default 0,
   error_rows      int not null default 0,
+  success_count   int not null default 0,
+  failed_count    int not null default 0,
   log             jsonb,
   created_by_id   uuid references public.users(id),
   created_at      timestamptz not null default now()
 );
+create index if not exists idx_import_jobs_user on public.import_jobs(user_id);
+create index if not exists idx_import_jobs_card on public.import_jobs(card_id);
 
 create table public.transactions (
   id                  bigint generated always as identity primary key,
-  user_id             uuid references public.users(id),
+  user_id             uuid not null references public.users(id),
   department_id       bigint references public.departments(id),
   card_id             bigint references public.corporate_cards(id),
   transaction_date    date not null,
@@ -112,6 +127,13 @@ create table public.transactions (
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now()
 );
+-- Now that import_jobs + transactions exist, wire up receipt_files' FKs.
+alter table public.receipt_files
+  add constraint receipt_files_import_job_fk
+    foreign key (import_job_id) references public.import_jobs(id),
+  add constraint receipt_files_transaction_fk
+    foreign key (transaction_id) references public.transactions(id);
+
 create index idx_tx_date     on public.transactions(transaction_date);
 create index idx_tx_user     on public.transactions(user_id);
 create index idx_tx_category on public.transactions(category);

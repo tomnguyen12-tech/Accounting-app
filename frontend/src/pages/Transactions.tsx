@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { db } from "@/lib/db";
 import { won, fmtDate, STATUS_STYLES } from "@/lib/format";
 import { Badge, Button, Card, CardBody, Input, Label, Select, Spinner } from "@/components/ui";
@@ -37,15 +37,33 @@ const EMPTY = {
   maxAmount: "",
   status: "",
   sourceType: "",
+  importJobId: "",
   missingPurpose: "",
   missingReceipt: "",
   approved: "",
 };
 
+const FILTER_KEYS = Object.keys(EMPTY) as (keyof typeof EMPTY)[];
+
+// Seed filter state from URL params (chart click-throughs from Monthly Report).
+function fromSearchParams(sp: URLSearchParams): Record<string, string> {
+  const out: Record<string, string> = { ...EMPTY };
+  for (const k of FILTER_KEYS) {
+    const v = sp.get(k);
+    if (v) out[k] = v;
+  }
+  // Support legacy ?startDate=…&endDate=… coming from API spec / external links.
+  if (!out.from && sp.get("startDate")) out.from = sp.get("startDate")!;
+  if (!out.to && sp.get("endDate")) out.to = sp.get("endDate")!;
+  return out;
+}
+
 export default function Transactions() {
   const navigate = useNavigate();
-  const [filters, setFilters] = useState<Record<string, string>>({ ...EMPTY });
-  const [applied, setApplied] = useState<Record<string, string>>({ ...EMPTY });
+  const [sp] = useSearchParams();
+  const seeded = useMemo(() => fromSearchParams(sp), [sp]);
+  const [filters, setFilters] = useState<Record<string, string>>(seeded);
+  const [applied, setApplied] = useState<Record<string, string>>(seeded);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<TransactionPage | null>(null);
   const [loading, setLoading] = useState(true);
@@ -223,6 +241,14 @@ export default function Transactions() {
               <option value="false">미승인</option>
             </Select>
           </div>
+          <div>
+            <Label>Import job</Label>
+            <Input
+              placeholder="job id"
+              value={filters.importJobId}
+              onChange={(e) => set("importJobId", e.target.value)}
+            />
+          </div>
           <div className="col-span-2 flex items-end gap-2 md:col-span-4 xl:col-span-2">
             <Button onClick={apply} className="flex-1">
               필터 적용 / Apply
@@ -252,10 +278,12 @@ export default function Transactions() {
                     <tr>
                       <th className="pb-2">일자</th>
                       <th className="pb-2">사용자</th>
+                      <th className="pb-2">카드</th>
                       <th className="pb-2">가맹점</th>
                       <th className="pb-2">카테고리</th>
                       <th className="pb-2 text-right">금액</th>
                       <th className="pb-2">사용목적</th>
+                      <th className="pb-2">Source</th>
                       <th className="pb-2">상태</th>
                     </tr>
                   </thead>
@@ -268,6 +296,9 @@ export default function Transactions() {
                       >
                         <td className="py-2.5">{fmtDate(t.transactionDate)}</td>
                         <td className="py-2.5">{t.user?.name ?? "-"}</td>
+                        <td className="py-2.5 font-mono text-xs text-slate-500">
+                          {t.card?.cardNumberMasked ?? t.cardNumberMasked ?? "-"}
+                        </td>
                         <td className="py-2.5">{t.merchantName}</td>
                         <td className="py-2.5">{t.category}</td>
                         <td className="py-2.5 text-right font-medium">{won(t.amount)}</td>
@@ -278,6 +309,22 @@ export default function Transactions() {
                             <span className="text-rose-500">미입력</span>
                           )}
                         </td>
+                        <td className="py-2.5 text-xs text-slate-500">
+                          {t.importJob ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/transactions?importJobId=${t.importJob!.id}`);
+                              }}
+                              className="hover:text-brand-600 hover:underline"
+                              title={t.importJob.originalName}
+                            >
+                              📄 #{t.importJob.id}
+                            </button>
+                          ) : (
+                            <span className="text-slate-400">{t.sourceType}</span>
+                          )}
+                        </td>
                         <td className="py-2.5">
                           <Badge className={STATUS_STYLES[t.status]}>{t.status}</Badge>
                         </td>
@@ -285,7 +332,7 @@ export default function Transactions() {
                     ))}
                     {!data.rows.length && (
                       <tr>
-                        <td colSpan={7} className="py-10 text-center text-slate-400">
+                        <td colSpan={9} className="py-10 text-center text-slate-400">
                           결과 없음 / No results
                         </td>
                       </tr>

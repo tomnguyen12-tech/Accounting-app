@@ -44,6 +44,38 @@ export interface CardRow {
   _count: { transactions: number };
 }
 
+export interface ImportJob {
+  id: number;
+  userId: string;
+  cardId?: number | null;
+  type: SourceType;
+  status: string;
+  originalName: string;
+  filePath?: string | null;
+  importMonth?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  totalRows: number;
+  successCount: number;
+  failedCount: number;
+  duplicateRows: number;
+  createdAt: string;
+  user?: { id: string; name: string } | null;
+  card?: { id: number; cardNumberMasked: string } | null;
+}
+
+export interface ReportSummary {
+  user: { id: string; name: string } | null;
+  card: { id: number; cardNumberMasked: string } | null;
+  period: { startDate: string; endDate: string };
+  totalAmount: number;
+  transactionCount: number;
+  categoryBreakdown: { category: string; label: string; amount: number; percentage: number; count: number }[];
+  topMerchants: { merchantName: string; amount: number; count: number }[];
+  largestTransaction: { merchantName: string; amount: number; transactionDate: string } | null;
+  dailySpending: { date: string; amount: number }[];
+}
+
 export interface Transaction {
   id: number;
   transactionDate: string;
@@ -66,6 +98,7 @@ export interface Transaction {
   user?: { id: string; name: string } | null;
   department?: Department | null;
   card?: { id: number; cardNumberMasked: string } | null;
+  importJob?: { id: number; originalName: string } | null;
   reviewLogs?: ReviewLog[];
 }
 

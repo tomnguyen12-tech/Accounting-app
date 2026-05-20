@@ -16,6 +16,7 @@ const NAV = [
   { to: "/", label: "Dashboard", ko: "대시보드", icon: LayoutDashboard, end: true },
   { to: "/transactions", label: "Transactions", ko: "거래내역", icon: ReceiptText },
   { to: "/import", label: "Import", ko: "데이터 가져오기", icon: Upload },
+  { to: "/import-jobs", label: "Import Jobs", ko: "업로드 이력", icon: Upload },
   { to: "/report", label: "Monthly Report", ko: "월별 리포트", icon: PieChart },
   { to: "/users", label: "Users", ko: "사용자", icon: Users },
   { to: "/cards", label: "Cards", ko: "법인카드", icon: CreditCard },
