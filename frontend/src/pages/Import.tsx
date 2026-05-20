@@ -64,8 +64,11 @@ export default function ImportPage() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ jobId: number | null; imported: number; duplicates: number; errors: number } | null>(null);
 
+  // Step 1 lists ONLY employees who already hold a card (assigned in Corporate
+  // Cards). This makes the import flow's owner choice consistent with the
+  // card→employee mapping rather than the full user roster.
   useEffect(() => {
-    db.listUsers().then((r) => setUsers(r.users));
+    db.listCardHolders().then((r) => setUsers(r.users));
   }, []);
 
   // Step 2: when user changes, reload that user's cards and reset card pick.
@@ -158,20 +161,31 @@ export default function ImportPage() {
       <Card>
         <CardBody className="space-y-5">
           <div>
-            <StepHeader n={1} title="Owner / User" hint="bắt buộc — giao dịch sẽ gán cho user này" />
+            <StepHeader
+              n={1}
+              title="Employee (card holder)"
+              hint="bắt buộc — chỉ nhân viên đang giữ thẻ trong Corporate Cards"
+            />
             <div className="mt-2">
               <Select
                 value={userId}
                 onChange={(e) => setUserId(e.target.value)}
                 className={!userId ? "border-rose-200" : ""}
+                disabled={!users.length}
               >
-                <option value="">— Chọn user (bắt buộc) —</option>
+                <option value="">— Chọn nhân viên (bắt buộc) —</option>
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>
-                    {u.name} · {u.email} ({u.role})
+                    {u.name} · {u.email}
                   </option>
                 ))}
               </Select>
+              {!users.length && (
+                <p className="mt-1 text-xs text-rose-500">
+                  Chưa có nhân viên nào được gắn thẻ. Vào <b>Corporate Cards</b> tạo thẻ +
+                  gán nhân viên trước.
+                </p>
+              )}
             </div>
           </div>
 

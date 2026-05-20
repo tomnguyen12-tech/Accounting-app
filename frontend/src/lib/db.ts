@@ -156,33 +156,151 @@ export const db = {
     };
   },
 
+  /** Look up a user by email or name; insert if missing. Returns the user id. */
+  async _resolveUser(
+    holderName?: string | null,
+    holderEmail?: string | null,
+  ): Promise<string | null> {
+    const name = (holderName ?? "").trim();
+    const email = (holderEmail ?? "").trim().toLowerCase();
+    if (!name && !email) return null;
+
+    if (email) {
+      const { data: byEmail } = await supabase
+        .from("users")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
+      if (byEmail) return byEmail.id;
+    }
+    if (name) {
+      const { data: byName } = await supabase
+        .from("users")
+        .select("id")
+        .eq("name", name)
+        .maybeSingle();
+      if (byName) return byName.id;
+    }
+    // Auto-create. Email defaults to a slug if not provided.
+    const finalEmail =
+      email ||
+      `${name.toLowerCase().replace(/[^a-z0-9.]/g, ".").replace(/\.+/g, ".")}@local.app`;
+    const { data: created, error } = await supabase
+      .from("users")
+      .insert({ name: name || finalEmail.split("@")[0], email: finalEmail, role: "USER" })
+      .select("id")
+      .single();
+    if (error) throw error;
+    return created.id;
+  },
+
+  async _resolveDepartment(name?: string | null): Promise<number | null> {
+    const n = (name ?? "").trim();
+    if (!n) return null;
+    const { data: found } = await supabase
+      .from("departments")
+      .select("id")
+      .eq("name", n)
+      .maybeSingle();
+    if (found) return found.id;
+    const { data: created, error } = await supabase
+      .from("departments")
+      .insert({ name: n })
+      .select("id")
+      .single();
+    if (error) throw error;
+    return created.id;
+  },
+
+  /**
+   * Create a card. Text-only inputs — if the holder/department doesn't exist
+   * yet, it's auto-created so the new employee immediately becomes available
+   * for selection in the Import flow.
+   */
   async createCard(input: {
     cardNumber: string;
     issuer?: string;
-    holderUserId?: string | null;
-    departmentId?: number | null;
+    holderName?: string;
+    holderEmail?: string;
+    departmentName?: string;
   }) {
     const digits = input.cardNumber.replace(/[^0-9]/g, "");
     const masked =
       digits.length >= 8
         ? `${digits.slice(0, 4)}-****-****-${digits.slice(-4)}`
         : input.cardNumber;
+    const holderUserId = await this._resolveUser(input.holderName, input.holderEmail);
+    const departmentId = await this._resolveDepartment(input.departmentName);
     const { error } = await supabase.from("corporate_cards").insert({
       card_number_masked: masked,
       last4: digits.slice(-4) || "0000",
       issuer: input.issuer ?? null,
-      holder_user_id: input.holderUserId ?? null,
-      department_id: input.departmentId ?? null,
+      holder_user_id: holderUserId,
+      department_id: departmentId,
     });
     if (error) throw error;
   },
 
-  async updateCard(id: number, patch: { holderUserId?: string | null }) {
-    const { error } = await supabase
-      .from("corporate_cards")
-      .update({ holder_user_id: patch.holderUserId ?? null })
-      .eq("id", id);
+  async updateCard(
+    id: number,
+    patch: {
+      cardNumber?: string;
+      issuer?: string;
+      holderName?: string;
+      holderEmail?: string;
+      departmentName?: string;
+      active?: boolean;
+    },
+  ) {
+    const update: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (patch.cardNumber !== undefined) {
+      const digits = patch.cardNumber.replace(/[^0-9]/g, "");
+      update.card_number_masked =
+        digits.length >= 8
+          ? `${digits.slice(0, 4)}-****-****-${digits.slice(-4)}`
+          : patch.cardNumber;
+      update.last4 = digits.slice(-4) || "0000";
+    }
+    if (patch.issuer !== undefined) update.issuer = patch.issuer || null;
+    if (patch.active !== undefined) update.active = patch.active;
+    if (patch.holderName !== undefined || patch.holderEmail !== undefined) {
+      update.holder_user_id = await this._resolveUser(patch.holderName, patch.holderEmail);
+    }
+    if (patch.departmentName !== undefined) {
+      update.department_id = await this._resolveDepartment(patch.departmentName);
+    }
+    const { error } = await supabase.from("corporate_cards").update(update).eq("id", id);
     if (error) throw error;
+  },
+
+  /** Hard delete a card. NULLs out references in transactions/import_jobs first. */
+  async deleteCard(id: number) {
+    await supabase.from("transactions").update({ card_id: null }).eq("card_id", id);
+    await supabase.from("import_jobs").update({ card_id: null }).eq("card_id", id);
+    const { error } = await supabase.from("corporate_cards").delete().eq("id", id);
+    if (error) throw error;
+  },
+
+  /** Users who currently hold at least one card — used by the Import page. */
+  async listCardHolders(): Promise<{ users: UserRow[] }> {
+    const { data, error } = await supabase
+      .from("corporate_cards")
+      .select(
+        "holder_user_id, holder:users(id,email,name,role,active, department:departments(id,name))",
+      )
+      .not("holder_user_id", "is", null);
+    if (error) throw error;
+    const seen = new Set<string>();
+    const users: UserRow[] = [];
+    (data ?? []).forEach((c: any) => {
+      if (c.holder && !seen.has(c.holder.id)) {
+        seen.add(c.holder.id);
+        users.push({ ...c.holder, _count: { cards: 0, transactions: 0 } });
+      }
+    });
+    return { users };
   },
 
   async listTransactions(
